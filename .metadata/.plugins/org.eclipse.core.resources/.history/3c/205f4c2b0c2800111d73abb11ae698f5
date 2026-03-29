@@ -1,0 +1,5 @@
+package com.codearena.code.entity;
+
+public class User {
+
+}

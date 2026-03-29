@@ -1,0 +1,51 @@
+package com.codearena.code.controller;
+
+import com.codearena.code.entity.Problem;
+import com.codearena.code.repository.ProblemRepository;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
+
+@RestController
+@RequestMapping("/api/problems")
+@CrossOrigin(origins = "*")
+public class ProblemController {
+
+    private final ProblemRepository problemRepository;
+
+    public ProblemController(ProblemRepository problemRepository) {
+        this.problemRepository = problemRepository;
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<?> getProblemForArena(@PathVariable Long id) {
+        Optional<Problem> problemOpt = problemRepository.findById(id);
+        
+        if (problemOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Problem p = problemOpt.get();
+
+        // Filter out the HIDDEN test cases before sending to React!
+        List<Map<String, Object>> publicTestCases = p.getTestCases().stream()
+                .filter(tc -> !tc.isHidden())
+                .map(tc -> Map.of(
+                        "input", tc.getInputData(),
+                        "output", tc.getExpectedOutput()
+                ))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(Map.of(
+                "title", p.getTitle(),
+                "description", p.getDescription(),
+                "difficulty", p.getDifficulty(),
+                "tags", p.getTags(),
+                "publicCases", publicTestCases
+        ));
+    }
+}

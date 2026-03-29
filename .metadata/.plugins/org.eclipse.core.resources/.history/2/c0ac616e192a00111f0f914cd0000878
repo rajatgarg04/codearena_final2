@@ -1,0 +1,87 @@
+package com.codearena.code.service;
+
+import org.springframework.stereotype.Service;
+import java.io.*;
+import java.nio.file.*;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class DockerExecutionService {
+
+    public String executeCode(String code, String language, String input) {
+        String tempDirName = "temp_" + UUID.randomUUID().toString();
+        Path tempDirPath = Paths.get(System.getProperty("user.dir"), tempDirName);
+        
+        try {
+            Files.createDirectories(tempDirPath);
+            String fileName;
+            String dockerImage;
+            String compileAndRunCmd;
+
+            if ("java".equals(language)) {
+                fileName = "Main.java";
+                dockerImage = "eclipse-temurin:22-jdk";
+                compileAndRunCmd = "javac Main.java && java Main < input.txt";
+            } else if ("python".equals(language)) {
+                fileName = "script.py";
+                dockerImage = "python:3.10-slim";
+                compileAndRunCmd = "python script.py < input.txt";
+            } else if ("cpp".equals(language)) {
+                fileName = "main.cpp";
+                dockerImage = "gcc:latest";
+                compileAndRunCmd = "g++ main.cpp -o main && ./main < input.txt";
+            } else {
+                return "Unsupported language";
+            }
+
+            // Write Code
+            Files.writeString(tempDirPath.resolve(fileName), code);
+            
+            // Write Input Data
+            Files.writeString(tempDirPath.resolve("input.txt"), input != null ? input : "");
+
+            String hostPath = tempDirPath.toAbsolutePath().toString();
+            
+            ProcessBuilder pb = new ProcessBuilder(
+                "docker", "run", "--rm", 
+                "--memory=256m", 
+                "--cpus=1", 
+                "-v", hostPath + ":/app", 
+                "-w", "/app", 
+                dockerImage, 
+                "sh", "-c", compileAndRunCmd
+            );
+
+            pb.redirectErrorStream(true);
+            Process process = pb.start();
+            
+            boolean finished = process.waitFor(10, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroy();
+                return "Error: Execution Timed Out";
+            }
+
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            StringBuilder output = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+
+            return output.toString().trim(); // Trim spaces/newlines for accurate comparison
+
+        } catch (Exception e) {
+            return "Execution Error: " + e.getMessage();
+        } finally {
+            try {
+                File dir = tempDirPath.toFile();
+                if (dir.exists()) {
+                    File[] files = dir.listFiles();
+                    if (files != null) for (File f : files) f.delete();
+                    dir.delete();
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+}

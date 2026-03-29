@@ -1,0 +1,79 @@
+package com.codearena.code.controller;
+
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.RestTemplate;
+
+import java.net.URI; // 👈 NEW IMPORT
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/ai")
+@CrossOrigin(origins = "*")
+public class AIAssistantController {
+
+    // PASTE YOUR FREE GEMINI API KEY HERE
+    private static final String GEMINI_API_KEY = "AIzaSyBv2M2dygMtrzXdXjbczQ_eJeg14nd3Iwc"; // (Keep your actual key here!)
+    
+    private static final String GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=" + GEMINI_API_KEY;
+
+    @PostMapping("/ask")
+    public ResponseEntity<?> askAssistant(@RequestBody Map<String, String> request) {
+        String userQuestion = request.get("question");
+        String currentCode = request.get("code");
+        String problemTitle = request.get("problemTitle");
+        String problemDesc = request.get("problemDesc");
+        String language = request.get("language");
+
+        // The Anti-Cheat System Prompt
+        String strictInstructions = String.format(
+            "You are a strict, highly intelligent competitive programming tutor. " +
+            "The student is solving a problem called '%s'. Problem description: '%s'. " +
+            "They are writing in %s. Their current code is:\n\n%s\n\n" +
+            "The student is asking: '%s'\n\n" +
+            "YOUR RULES:\n" +
+            "1. NEVER give the direct solution or write the corrected code for them.\n" +
+            "2. NEVER reveal hidden test cases or edge cases directly, hint at them conceptually.\n" +
+            "3. If their code has a syntax error, point out the line and explain why.\n" +
+            "4. If their logic is flawed, ask a guiding question to help them realize it.\n" +
+            "5. Keep your response short, formatted in clean Markdown, and encouraging.",
+            problemTitle, problemDesc, language, currentCode, userQuestion
+        );
+
+        Map<String, Object> requestBody = new HashMap<>();
+        Map<String, Object> partsMap = new HashMap<>();
+        partsMap.put("text", strictInstructions);
+        Map<String, Object> contentMap = new HashMap<>();
+        contentMap.put("parts", List.of(partsMap));
+        requestBody.put("contents", List.of(contentMap));
+
+        RestTemplate restTemplate = new RestTemplate();
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+
+        HttpEntity<Map<String, Object>> entity = new HttpEntity<>(requestBody, headers);
+
+        try {
+            // 👇 THE MAGIC FIX: Convert String to URI so Spring doesn't ruin the URL!
+            URI uri = new URI(GEMINI_URL); 
+            ResponseEntity<Map> response = restTemplate.postForEntity(uri, entity, Map.class);
+            
+            Map<String, Object> responseBody = response.getBody();
+            List<Map<String, Object>> candidates = (List<Map<String, Object>>) responseBody.get("candidates");
+            Map<String, Object> content = (Map<String, Object>) candidates.get(0).get("content");
+            List<Map<String, Object>> parts = (List<Map<String, Object>>) content.get("parts");
+            String aiTextResponse = (String) parts.get(0).get("text");
+
+            return ResponseEntity.ok(Map.of("success", true, "reply", aiTextResponse));
+            
+        } catch (Exception e) {
+            e.printStackTrace();
+            return ResponseEntity.ok(Map.of("success", false, "reply", "AI is currently resting its brain. Please try again in a moment."));
+        }
+    }
+}

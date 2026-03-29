@@ -1,0 +1,111 @@
+package com.codearena.code.controller;
+
+import com.codearena.code.entity.Leaderboard;
+import com.codearena.code.entity.TestCase;
+import com.codearena.code.repository.LeaderboardRepository;
+import com.codearena.code.repository.TestCaseRepository;
+import com.codearena.code.service.DockerExecutionService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/submit")
+@CrossOrigin(origins = "*")
+public class SubmissionController {
+
+    private final DockerExecutionService dockerService;
+    private final TestCaseRepository testCaseRepository;
+    private final LeaderboardRepository leaderboardRepository;
+    private final SimpMessagingTemplate messagingTemplate; // 👈 Allows REST API to send WebSocket messages!
+
+    public SubmissionController(DockerExecutionService dockerService, TestCaseRepository testCaseRepository, LeaderboardRepository leaderboardRepository, SimpMessagingTemplate messagingTemplate) {
+        this.dockerService = dockerService;
+        this.testCaseRepository = testCaseRepository;
+        this.leaderboardRepository = leaderboardRepository;
+        this.messagingTemplate = messagingTemplate;
+    }
+
+    @PostMapping("/{problemId}")
+    public ResponseEntity<Map<String, Object>> submitSolution(
+            @PathVariable Long problemId,
+            @RequestBody Map<String, String> request) {
+
+        String code = request.get("code");
+        String language = request.get("language");
+        String roomId = request.get("roomId");
+        String playerName = request.get("playerName");
+
+        List<TestCase> testCases = testCaseRepository.findByProblemId(problemId);
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        boolean allPassed = true;
+        int passedCount = 0;
+
+        for (int i = 0; i < testCases.size(); i++) {
+            TestCase tc = testCases.get(i);
+            
+            // Execute code with the specific test case input!
+            String actualOutput = dockerService.executeCode(code, language, tc.getInputData());
+            
+            // Clean up invisible whitespace/newlines for accurate comparison
+            String cleanActual = actualOutput != null ? actualOutput.trim() : "";
+            String cleanExpected = tc.getExpectedOutput() != null ? tc.getExpectedOutput().trim() : "";
+            
+            boolean passed = cleanActual.equals(cleanExpected);
+            
+            if (passed) {
+                passedCount++;
+            } else {
+                allPassed = false;
+            }
+
+            // 👇 FIX: We are now sending the exact expected and actual strings back to React!
+            results.add(Map.of(
+                "testCase", i + 1, 
+                "passed", passed,
+                "expected", cleanExpected,
+                "actual", cleanActual,
+                "isHidden", tc.isHidden()
+            ));
+        }
+
+        // --- THE NEW SCORING SYSTEM ---
+        Leaderboard playerStats = leaderboardRepository.findByRoomIdAndPlayerName(roomId, playerName);
+        
+        if (playerStats == null) {
+            playerStats = new Leaderboard();
+            playerStats.setRoomId(roomId);
+            playerStats.setPlayerName(playerName);
+            playerStats.setScore(1000); // Base Score
+            playerStats.setCompleted(false);
+            leaderboardRepository.save(playerStats);
+        }
+
+        if (allPassed && !playerStats.isCompleted()) {
+            // Player Won! Lock in their time.
+            playerStats.setCompleted(true);
+            playerStats.setCompletionTime(System.currentTimeMillis());
+            leaderboardRepository.save(playerStats);
+        } else if (!allPassed) {
+            // 👇 PENALTY: Wrong submission costs 50 points!
+            playerStats.setScore(Math.max(0, playerStats.getScore() - 50)); 
+            leaderboardRepository.save(playerStats);
+        }
+
+        // Broadcast the updated leaderboard to everyone in the room
+        List<Leaderboard> updatedBoard = leaderboardRepository.findByRoomIdOrderByScoreDescCompletionTimeAsc(roomId);
+        messagingTemplate.convertAndSend("/topic/room/" + roomId + "/leaderboard", updatedBoard);
+
+        return ResponseEntity.ok(Map.of(
+            "success", allPassed,
+            "passedCount", passedCount,
+            "totalCases", testCases.size(),
+            "results", results
+        ));
+    }
+}

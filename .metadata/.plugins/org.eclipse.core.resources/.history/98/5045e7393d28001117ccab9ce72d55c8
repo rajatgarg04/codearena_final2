@@ -1,0 +1,92 @@
+package com.codearena.code.service;
+
+import org.springframework.stereotype.Service;
+import java.io.*;
+import java.nio.file.*;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+
+@Service
+public class DockerExecutionService {
+
+    public String executeCode(String code, String language) {
+        // 1. Create a unique temporary directory for this execution
+        String tempDirName = "temp_" + UUID.randomUUID().toString();
+        Path tempDirPath = Paths.get(System.getProperty("user.dir"), tempDirName);
+        
+        try {
+            Files.createDirectories(tempDirPath);
+            String fileName;
+            String dockerImage;
+            String compileAndRunCmd;
+
+            // 2. Configure environment based on language
+            if ("java".equals(language)) {
+                fileName = "Main.java";
+                dockerImage = "eclipse-temurin:22-jdk";
+                compileAndRunCmd = "javac Main.java && java Main";
+            } else if ("python".equals(language)) {
+                fileName = "script.py";
+                dockerImage = "python:3.10-slim";
+                compileAndRunCmd = "python script.py";
+            } else if ("cpp".equals(language)) {
+                fileName = "main.cpp";
+                dockerImage = "gcc:latest";
+                compileAndRunCmd = "g++ main.cpp -o main && ./main";
+            } else {
+                return "Unsupported language";
+            }
+
+            // 3. Write the user's code to the temporary file
+            Path filePath = tempDirPath.resolve(fileName);
+            Files.writeString(filePath, code);
+
+            // 4. Build the Docker Command
+            String hostPath = tempDirPath.toAbsolutePath().toString();
+            
+            ProcessBuilder pb = new ProcessBuilder(
+                "docker", "run", "--rm", 
+                "--memory=256m", 
+                "--cpus=1", 
+                "-v", hostPath + ":/app", 
+                "-w", "/app", 
+                dockerImage, 
+                "sh", "-c", compileAndRunCmd
+            );
+
+            pb.redirectErrorStream(true); // Merge errors and standard output
+            Process process = pb.start();
+            
+            // 5. Security: Timeout after 10 seconds (kills infinite loops)
+            boolean finished = process.waitFor(10, TimeUnit.SECONDS);
+            
+            if (!finished) {
+                process.destroy();
+                return "Error: Execution Timed Out (Possible Infinite Loop)";
+            }
+
+            // 6. Read the output from the container
+            BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+            StringBuilder output = new StringBuilder();
+            String line;
+            while ((line = reader.readLine()) != null) {
+                output.append(line).append("\n");
+            }
+
+            return output.toString();
+
+        } catch (Exception e) {
+            return "Execution Error: " + e.getMessage();
+        } finally {
+            // 7. Cleanup: Delete the temporary directory so we don't clog your hard drive
+            try {
+                File dir = tempDirPath.toFile();
+                if (dir.exists()) {
+                    File[] files = dir.listFiles();
+                    if (files != null) for (File f : files) f.delete();
+                    dir.delete();
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+}

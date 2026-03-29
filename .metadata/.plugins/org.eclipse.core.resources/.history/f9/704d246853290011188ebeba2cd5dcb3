@@ -1,0 +1,6 @@
+package com.codearena.code.repository;
+import com.codearena.code.entity.TestCase;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface TestCaseRepository extends JpaRepository<TestCase, Long> {
+}

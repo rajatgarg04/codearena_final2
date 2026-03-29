@@ -1,0 +1,18 @@
+package com.codearena.code.entity;
+
+import jakarta.persistence.*;
+import lombok.Data;
+
+@Entity
+@Table(name = "leaderboard")
+@Data
+public class Leaderboard {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String roomId;
+    private String playerName;
+    private Integer score = 0;
+    private Integer attempts = 0;
+    private String status = "SOLVING"; // SOLVING or FINISHED
+}

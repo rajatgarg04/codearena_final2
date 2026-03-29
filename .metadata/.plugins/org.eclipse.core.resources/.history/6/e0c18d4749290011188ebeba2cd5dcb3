@@ -1,0 +1,5 @@
+package com.codearena.code.config;
+
+public class DatabaseSeeder {
+
+}

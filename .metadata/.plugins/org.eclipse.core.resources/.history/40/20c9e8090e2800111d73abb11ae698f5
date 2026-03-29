@@ -1,0 +1,5 @@
+package com.codearena.code.repository;
+
+public interface RoomRepository {
+
+}

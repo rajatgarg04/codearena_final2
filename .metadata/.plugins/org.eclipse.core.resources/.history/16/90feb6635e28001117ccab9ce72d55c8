@@ -1,0 +1,28 @@
+package com.codearena.code.controller;
+
+import com.codearena.code.entity.Room;
+import com.codearena.code.service.RoomService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/rooms")
+@CrossOrigin(origins = "*") // Crucial: Allows our React frontend to call this backend
+public class RoomController {
+
+    private final RoomService roomService;
+
+    public RoomController(RoomService roomService) {
+        this.roomService = roomService;
+    }
+
+    @PostMapping("/create")
+    public ResponseEntity<Room> createRoom() {
+        return ResponseEntity.ok(roomService.createRoom());
+    }
+
+    @GetMapping("/{roomCode}")
+    public ResponseEntity<Room> getRoom(@PathVariable String roomCode) {
+        return ResponseEntity.ok(roomService.getRoom(roomCode));
+    }
+}

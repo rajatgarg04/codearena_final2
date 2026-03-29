@@ -1,0 +1,61 @@
+package com.codearena.code.config;
+
+import com.codearena.code.entity.Problem;
+import com.codearena.code.entity.TestCase;
+import com.codearena.code.repository.ProblemRepository;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
+
+@Configuration
+public class DatabaseSeeder {
+
+    @Bean
+    CommandLineRunner initDatabase(ProblemRepository problemRepository) {
+        return args -> {
+            if (problemRepository.count() == 0) {
+                
+                // 1. EASY PROBLEM (10 Min)
+                Problem p1 = new Problem();
+                p1.setTitle("Add Two Numbers");
+                p1.setDescription("Given two numbers on separate lines, print their sum.");
+                p1.setDifficulty("EASY");
+                p1.setTags("Math,Basics");
+                
+                TestCase t1_1 = new TestCase(); t1_1.setInputData("5\n10"); t1_1.setExpectedOutput("15"); t1_1.setHidden(false); t1_1.setProblem(p1);
+                TestCase t1_2 = new TestCase(); t1_2.setInputData("-5\n10"); t1_2.setExpectedOutput("5"); t1_2.setHidden(true); t1_2.setProblem(p1);
+                p1.setTestCases(List.of(t1_1, t1_2));
+                problemRepository.save(p1);
+
+                // 2. MEDIUM PROBLEM (30 Min)
+                Problem p2 = new Problem();
+                p2.setTitle("Find the Maximum");
+                p2.setDescription("Given an integer N, followed by N space-separated integers, output the maximum integer in the array.");
+                p2.setDifficulty("MEDIUM");
+                p2.setTags("Arrays,Logic");
+                
+                TestCase t2_1 = new TestCase(); t2_1.setInputData("3\n1 5 3"); t2_1.setExpectedOutput("5"); t2_1.setHidden(false); t2_1.setProblem(p2);
+                TestCase t2_2 = new TestCase(); t2_2.setInputData("5\n-10 -5 -20 -1 -50"); t2_2.setExpectedOutput("-1"); t2_2.setHidden(true); t2_2.setProblem(p2);
+                p2.setTestCases(List.of(t2_1, t2_2));
+                problemRepository.save(p2);
+
+                // 3. HARD PROBLEM (45 Min / Team Mode)
+                Problem p3 = new Problem();
+                p3.setTitle("Valid Palindrome");
+                p3.setDescription("Given a string, print 'true' if it is a palindrome, and 'false' otherwise. Ignore spaces and case.");
+                p3.setDifficulty("HARD");
+                p3.setTags("Strings,Algorithms");
+                
+                TestCase t3_1 = new TestCase(); t3_1.setInputData("Racecar"); t3_1.setExpectedOutput("true"); t3_1.setHidden(false); t3_1.setProblem(p3);
+                TestCase t3_2 = new TestCase(); t3_2.setInputData("hello"); t3_2.setExpectedOutput("false"); t3_2.setHidden(false); t3_2.setProblem(p3);
+                TestCase t3_3 = new TestCase(); t3_3.setInputData("A man a plan a canal Panama"); t3_3.setExpectedOutput("true"); t3_3.setHidden(true); t3_3.setProblem(p3);
+                p3.setTestCases(List.of(t3_1, t3_2, t3_3));
+                problemRepository.save(p3);
+
+                System.out.println("✅ Database Seeded with 3 Dynamic Problems!");
+            }
+        };
+    }
+}

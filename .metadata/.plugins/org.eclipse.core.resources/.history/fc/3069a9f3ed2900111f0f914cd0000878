@@ -1,0 +1,136 @@
+package com.codearena.code.controller;
+
+import com.codearena.code.entity.Leaderboard;
+import com.codearena.code.entity.TestCase;
+import com.codearena.code.repository.LeaderboardRepository;
+import com.codearena.code.repository.TestCaseRepository;
+import com.codearena.code.service.DockerExecutionService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/submit")
+@CrossOrigin(origins = "*")
+public class SubmissionController {
+
+    private final DockerExecutionService dockerService;
+    private final TestCaseRepository testCaseRepository;
+    private final LeaderboardRepository leaderboardRepository;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    public SubmissionController(DockerExecutionService dockerService, TestCaseRepository testCaseRepository, LeaderboardRepository leaderboardRepository, SimpMessagingTemplate messagingTemplate) {
+        this.dockerService = dockerService;
+        this.testCaseRepository = testCaseRepository;
+        this.leaderboardRepository = leaderboardRepository;
+        this.messagingTemplate = messagingTemplate;
+    }
+
+    // 👇 FIX 1: Clearly named route to prevent collision!
+    @PostMapping("/submit-code/{problemId}")
+    public ResponseEntity<Map<String, Object>> submitSolution(
+            @PathVariable Long problemId,
+            @RequestBody Map<String, String> request) {
+
+        String code = request.get("code");
+        String language = request.get("language");
+        String roomId = request.get("roomId");
+        String playerName = request.get("playerName");
+        int timeLeft = request.containsKey("timeLeft") ? Integer.parseInt(request.get("timeLeft")) : 0;
+
+        List<TestCase> testCases = testCaseRepository.findByProblemId(problemId);
+        List<Map<String, Object>> results = new ArrayList<>();
+
+        if (testCases == null || testCases.isEmpty()) {
+            return ResponseEntity.ok(Map.of("success", false, "passedCount", 0, "totalCases", 0, "results", List.of(Map.of("testCase", 1, "passed", false, "expected", "Backend Error", "actual", "No test cases found!"))));
+        }
+
+        boolean allPassed = true;
+        int passedCount = 0;
+
+        for (int i = 0; i < testCases.size(); i++) {
+            TestCase tc = testCases.get(i);
+            String inputData = tc.getInputData() != null ? tc.getInputData() : "";
+            String actualOutput = dockerService.executeCode(code, language, inputData);
+            
+            String cleanActual = actualOutput != null ? actualOutput.trim() : "";
+            String cleanExpected = tc.getExpectedOutput() != null ? tc.getExpectedOutput().trim() : "";
+            
+            boolean passed = cleanActual.equals(cleanExpected);
+            if (passed) passedCount++; else allPassed = false;
+
+            results.add(Map.of("testCase", i + 1, "passed", passed, "expected", cleanExpected, "actual", cleanActual, "isHidden", tc.isHidden()));
+        }
+
+        if (roomId != null && playerName != null) {
+            // 👇 Change to findFirstByRoomIdAndPlayerName
+            Leaderboard playerStats = leaderboardRepository.findFirstByRoomIdAndPlayerName(roomId, playerName);
+            
+            if (playerStats == null) {
+                playerStats = new Leaderboard();
+                playerStats.setRoomId(roomId);
+                playerStats.setPlayerName(playerName);
+                playerStats.setScore(100);
+                playerStats.setCompleted(false);
+            }
+
+            if (allPassed && !playerStats.isCompleted()) {
+                playerStats.setCompleted(true);
+                playerStats.setCompletionTime(System.currentTimeMillis());
+                
+                int finalDecayedScore = (int) Math.max(0, (playerStats.getScore() / 600.0) * timeLeft);
+                
+                // 👇 FIX: Cap the final score so it cannot exceed their current max possible score!
+                playerStats.setScore(Math.min(playerStats.getScore(), finalDecayedScore));
+                
+                leaderboardRepository.save(playerStats);
+                
+            } else if (!allPassed && !playerStats.isCompleted()) {
+                playerStats.setScore(Math.max(0, playerStats.getScore() - 10)); 
+                leaderboardRepository.save(playerStats);
+            }
+
+            List<Leaderboard> updatedBoard = leaderboardRepository.findByRoomIdOrderByScoreDescCompletionTimeAsc(roomId);
+            messagingTemplate.convertAndSend("/topic/room/" + roomId + "/leaderboard", updatedBoard);
+        }
+
+        return ResponseEntity.ok(Map.of("success", allPassed, "passedCount", passedCount, "totalCases", testCases.size(), "results", results));
+    }
+
+    // 👇 FIX 2: Distinct route for penalties
+    @PostMapping("/apply-penalty")
+    public ResponseEntity<?> applyPenalty(@RequestBody Map<String, Object> request) {
+        String roomId = (String) request.get("roomId");
+        String playerName = (String) request.get("playerName");
+        int penaltyAmount = (Integer) request.get("penaltyAmount");
+
+        // 👇 Change to findFirstByRoomIdAndPlayerName
+        Leaderboard stats = leaderboardRepository.findFirstByRoomIdAndPlayerName(roomId, playerName);
+        if (stats == null) {
+            stats = new Leaderboard();
+            stats.setRoomId(roomId);
+            stats.setPlayerName(playerName);
+            stats.setScore(100);
+            stats.setCompleted(false);
+        }
+
+        if (!stats.isCompleted()) {
+            stats.setScore(Math.max(0, stats.getScore() - penaltyAmount));
+            leaderboardRepository.save(stats);
+        }
+
+        List<Leaderboard> updatedBoard = leaderboardRepository.findByRoomIdOrderByScoreDescCompletionTimeAsc(roomId);
+        messagingTemplate.convertAndSend("/topic/room/" + roomId + "/leaderboard", updatedBoard);
+        return ResponseEntity.ok().build();
+    }
+
+    // 👇 FIX 3: Fetch initial leaderboard so it isn't invisible!
+    @GetMapping("/leaderboard/{roomId}")
+    public ResponseEntity<List<Leaderboard>> getLeaderboard(@PathVariable String roomId) {
+        return ResponseEntity.ok(leaderboardRepository.findByRoomIdOrderByScoreDescCompletionTimeAsc(roomId));
+    }
+}

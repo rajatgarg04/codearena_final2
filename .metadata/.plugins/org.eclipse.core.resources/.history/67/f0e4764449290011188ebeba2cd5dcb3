@@ -1,0 +1,34 @@
+package com.codearena.code.controller;
+
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@RestController
+@RequestMapping("/api/rooms")
+@CrossOrigin(origins = "*")
+public class RoomController {
+
+    // Fast, in-memory storage: Map<RoomCode, Mode>
+    private static final Map<String, String> activeRooms = new ConcurrentHashMap<>();
+
+    @PostMapping("/create")
+    public ResponseEntity<?> createRoom(@RequestBody Map<String, String> request) {
+        String roomCode = request.get("roomCode");
+        String mode = request.get("mode");
+        activeRooms.put(roomCode, mode);
+        return ResponseEntity.ok(Map.of("success", true));
+    }
+
+    @GetMapping("/{roomCode}")
+    public ResponseEntity<?> checkRoom(@PathVariable String roomCode) {
+        if (activeRooms.containsKey(roomCode)) {
+            return ResponseEntity.ok(Map.of(
+                "exists", true, 
+                "mode", activeRooms.get(roomCode)
+            ));
+        }
+        return ResponseEntity.ok(Map.of("exists", false));
+    }
+}

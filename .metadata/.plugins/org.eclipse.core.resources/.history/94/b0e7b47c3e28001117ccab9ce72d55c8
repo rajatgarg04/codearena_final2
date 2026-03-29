@@ -1,0 +1,64 @@
+package com.codearena.code.controller;
+
+import com.codearena.code.entity.TestCase;
+import com.codearena.code.repository.TestCaseRepository;
+import com.codearena.code.service.DockerExecutionService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/submit")
+@CrossOrigin(origins = "*")
+public class SubmissionController {
+
+    private final DockerExecutionService dockerService;
+    private final TestCaseRepository testCaseRepository;
+
+    public SubmissionController(DockerExecutionService dockerService, TestCaseRepository testCaseRepository) {
+        this.dockerService = dockerService;
+        this.testCaseRepository = testCaseRepository;
+    }
+
+    @PostMapping("/{problemId}")
+    public ResponseEntity<Map<String, Object>> submitSolution(
+            @PathVariable Long problemId,
+            @RequestBody Map<String, String> request) {
+        
+        String code = request.get("code");
+        String language = request.get("language");
+        
+        List<TestCase> testCases = testCaseRepository.findByProblemId(problemId);
+        List<Map<String, Object>> results = new ArrayList<>();
+        
+        boolean allPassed = true;
+        int passedCount = 0;
+
+        for (int i = 0; i < testCases.size(); i++) {
+            TestCase tc = testCases.get(i);
+            String actualOutput = dockerService.executeCode(code, language, tc.getInputData());
+            
+            boolean passed = actualOutput.equals(tc.getExpectedOutput().trim());
+            if (passed) passedCount++;
+            else allPassed = false;
+
+            results.add(Map.of(
+                "testCase", i + 1,
+                "passed", passed,
+                "isHidden", tc.isHidden(),
+                "actualOutput", tc.isHidden() ? "Hidden" : actualOutput,
+                "expectedOutput", tc.isHidden() ? "Hidden" : tc.getExpectedOutput()
+            ));
+        }
+
+        return ResponseEntity.ok(Map.of(
+            "success", allPassed,
+            "passedCount", passedCount,
+            "totalCases", testCases.size(),
+            "results", results
+        ));
+    }
+}

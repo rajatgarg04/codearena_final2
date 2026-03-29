@@ -1,0 +1,28 @@
+package com.codearena.code.controller;
+
+import com.codearena.code.service.DockerExecutionService;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import java.util.Map;
+
+@RestController
+@RequestMapping("/api/execute")
+@CrossOrigin(origins = "*")
+public class ExecutionController {
+
+    private final DockerExecutionService dockerService;
+
+    public ExecutionController(DockerExecutionService dockerService) {
+        this.dockerService = dockerService;
+    }
+
+    @PostMapping
+    public ResponseEntity<Map<String, String>> executeCode(@RequestBody Map<String, String> request) {
+        String code = request.get("code");
+        String language = request.get("language");
+        
+        String output = dockerService.executeCode(code, language);
+        
+        return ResponseEntity.ok(Map.of("output", output));
+    }
+}
