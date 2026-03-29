@@ -11,15 +11,14 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
-    public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // 👇 Replaced the "*" with your explicit Vercel and Localhost URLs
-    	registry.addEndpoint("/ws-arena")
-        .setAllowedOrigins(
-            "https://codearena-final2.vercel.app", 
-            "https://codearena-final2-rajatgarg04s-projects.vercel.app",
-            "http://localhost:5173",
-            "http://localhost:3000"
-        )
+public void registerStompEndpoints(StompEndpointRegistry registry) {
+    registry.addEndpoint("/ws-arena")
+            .setAllowedOrigins(
+                "https://codearena-final2.vercel.app", 
+                "https://codearena-final2-rajatgarg04s-projects.vercel.app",
+                "http://localhost:5173",
+                "http://localhost:3000"
+            );
         .withSockJS();
     }
 
